@@ -1,0 +1,46 @@
+#!/bin/python3
+import sys
+import argparse
+import yaml
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Counts keys in a YAML file's 'topology' -> 'VMs' section that contain specified patterns."
+    )
+    parser.add_argument(
+        "--patterns",
+        required=True,
+        help="Comma-separated list of patterns to search for (e.g. T1,UT2,FT2)"
+    )
+    parser.add_argument(
+        "file",
+        help="Path to the YAML file"
+    )
+    
+    args = parser.parse_args()
+    
+    # Split patterns by comma
+    patterns = args.patterns.split(',')
+    file_path = args.file
+    
+    # Attempt to read and parse the YAML file
+    try:
+        with open(file_path, 'r') as f:
+            data = yaml.safe_load(f)
+    except Exception as e:
+        sys.exit(f"Error reading file: {e}")
+    
+    # Extract the VMs dictionary from the topology section
+    try:
+        vms = data['topology']['VMs']
+    except KeyError:
+        sys.exit("Error: 'topology' or 'VMs' key not found in the YAML file.")
+    
+    # For each pattern, count how many keys in the vms dict contain the given substring
+    for pattern in patterns:
+        count = sum(1 for key in vms if pattern in key)
+        print(f"{pattern} count: {count}")
+        
+if __name__ == '__main__':
+    main()
+

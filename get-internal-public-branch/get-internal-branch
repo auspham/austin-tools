@@ -1,0 +1,8 @@
+#!/bin/bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+if [[ $CURRENT_BRANCH == *"$USER/internal/"* ]]; then
+  echo $CURRENT_BRANCH
+else
+  echo $CURRENT_BRANCH | sed "s|$USER/|$USER/internal/|"
+fi

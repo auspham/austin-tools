@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Ensure fzf is installed
+if ! command -v fzf &> /dev/null; then
+  echo "fzf is not installed. Please install it first."
+  exit 1
+fi
+
+# Extract host names from ~/.ssh/config and use fzf for selection
+HOST_NAME=$(grep -iE "^Host " ~/.ssh/config | awk '{print $2}' | fzf --layout=reverse --height 40% --prompt="Select Host: ")
+
+# Check if a host name was selected
+if [ -z "$HOST_NAME" ]; then
+  echo "No host selected. Exiting."
+  exit 1
+fi
+
+echo "[+] Syncing to $HOST_NAME..."
+
+# Variables
+CURRENT_DIR=$(basename "$(pwd)")   # Name of the current directory
+
+if [[ -n $1 ]]; then
+  REMOTE_DIR="~/sync/$1"
+else
+  REMOTE_DIR="~/sync/$CURRENT_DIR"   # Remote directory path based on current directory
+fi
+
+# Rsync command with the required options
+rsync -avzc --checksum --delete --rsync-path="mkdir -p ~/sync && rsync" \
+    --include="ansible/group_vars/all/secrets.json" \
+    --include="ansible/password.txt" \
+    --include="tests/metadata" \
+    --exclude='/.git' \
+    --filter="dir-merge,- .gitignore" \
+    . "$HOST_NAME:$REMOTE_DIR"
+
+# Success message
+echo "Directory synced to $HOST_NAME:$REMOTE_DIR"
+

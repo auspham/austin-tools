@@ -1,0 +1,5 @@
+# Visual Studio Code settings
+.vscode/
+
+# If you don't want to share workspace settings, ignore these files
+*.code-workspace

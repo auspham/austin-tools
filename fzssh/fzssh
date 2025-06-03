@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Need fzf installed
+# Path to the external plain text server list.
+# The file should have one server per line in the format:
+#   servername    IP
+# Lines starting with '#' are considered comments.
+FILE="$HOME/.serverlist.csv"
+
+if [ ! -f "$FILE" ]; then
+    echo "Server list file not found: $FILE"
+    exit 1
+fi
+
+# Check if the first argument is an IPv4 address
+if [[ "$1" =~ ^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$ ]]; then
+    IP="$1"
+    # Extract the first two octets and add a dot for all matching
+    IP_PREFIX=$(echo "$IP" | awk -F. '{print $1 "." $2 "."}')
+    # Parse ~/.ssh/config for Host/HostName/ProxyCommand pairs using only two octets
+    JUMP_HOST=$(awk -v prefix2="$IP_PREFIX" '
+        $1=="Host" {host=$2}
+        (tolower($1)=="hostname" || tolower($1)=="host") && index($2, prefix2) == 1 {print host; exit}
+        tolower($1)=="proxycommand" && match($0, prefix2) {print host; exit}
+    ' ~/.ssh/config)
+    if [ -n "$JUMP_HOST" ]; then
+        JUMP_CMD=(ssh -J "$JUMP_HOST")
+        KEY="$JUMP_HOST"
+    else
+        # fallback to default jump host if no match
+        JUMP_CMD=(ssh -J dev-vm)
+        KEY="dev-vm"
+    fi
+    shift # Remove the IP argument for getopts below
+else
+    MENU=$(grep -vE '^\s*#' "$FILE" | grep -vE '^\s*$')
+
+    CHOICE=$(echo -e "$MENU" | fzf --layout=reverse --height 40% --header="Select Hostname" --prompt="SSH > ")
+
+    # Check if a choice was made.
+    if [ -z "$CHOICE" ]; then
+        echo "No selection made."
+        exit 1
+    fi
+
+    # Extract the server key and IP using awk.
+    KEY=$(echo "$CHOICE" | awk '{print $1}')
+    IP=$(echo "$CHOICE" | awk '{print $2}')
+
+    # Determine the appropriate jumpbox command based on simple pattern matching.
+    if [[ "$KEY" == *"tk5"* ]]; then
+        JUMP_CMD=(ssh -J server-tk5)
+    elif [[ "$KEY" == *"svc"* ]]; then
+        JUMP_CMD=(ssh -J server-svc-2)
+    elif [[ "$KEY" == *"str"* ]]; then
+        JUMP_CMD=(ssh -J server-14)
+    elif [[ "$KEY" == *"bjw"* ]]; then
+        JUMP_CMD=(ssh -J bjw-can-serv-4)
+    else
+        JUMP_CMD=(ssh -J dev-vm)
+    fi
+fi
+
+# Prompt the user for a username; if empty, use the current user.
+echo "[+] Selected: $KEY ($IP)"
+read -r -p "[+] Enter username (default: $USER): " USERNAME
+if [ -z "$USERNAME" ]; then
+    USERNAME="$USER"
+fi
+
+echo "[+] Username: $USERNAME"
+echo "[+] Using jumpbox: ${JUMP_CMD[*]}"
+echo "Connecting..."
+
+# Parse additional arguments for port forwarding (-L option).
+PORT_FORWARDING=""
+while getopts "L:" opt; do
+    case "$opt" in
+        L)
+            PORT_FORWARDING="$OPTARG"
+            ;;
+        *)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Shift processed options to access remaining arguments.
+shift $((OPTIND - 1))
+
+# Check if a port forwarding option was provided.
+if [ -n "$PORT_FORWARDING" ]; then
+    echo "[+] Port forwarding enabled: -L $PORT_FORWARDING"
+    JUMP_CMD+=("-L" "$PORT_FORWARDING")
+fi
+
+# Initiate the SSH session using the jumpbox, provided username, and port forwarding if specified.
+"${JUMP_CMD[@]}" "${USERNAME}@${IP}"
+

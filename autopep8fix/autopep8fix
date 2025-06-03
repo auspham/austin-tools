@@ -1,0 +1,51 @@
+#!/bin/python3
+import subprocess
+import re
+
+COMMAND = "pre-commit run"
+# Make sure output is returned as a string and include stderr, if needed
+result = subprocess.run(
+    COMMAND,
+    shell=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,  # combine stderr with stdout if needed
+    text=True  # ensures that result.stdout is a string
+)
+
+output_str = result.stdout
+
+# The regex allows optional whitespace at the start of the line.
+pattern = re.compile(r'^\s*(?P<module>[^:]+):\d+:\d+:\s+(?P<code>[EF]\d{3})', re.MULTILINE)
+matches = pattern.findall(output_str)
+
+print(f"Total matches found: {len(matches)}")
+
+test_module_uniques = set()
+code_uniques = set()
+
+for module, code in matches:
+    test_module_uniques.add(module)
+    code_uniques.add(code)
+    print(f"{module}: {code}")
+
+print()
+
+prompt = input("[+] Continue to autofix? [[y]/n]: ")
+if prompt.lower() == "n": 
+    print("[+] Aborted!")
+    exit()
+
+FIX_COMMAND = "autopep8 --in-place --select {} {}"
+
+result = subprocess.run(
+    FIX_COMMAND.format(",".join(code_uniques), " ".join(test_module_uniques)),
+    shell=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,  # combine stderr with stdout if needed
+    text=True  # ensures that result.stdout is a string
+)
+
+print("[+] Done, please commit")
+
+print(result.stdout)
+

@@ -1,0 +1,45 @@
+#!/bin/python3
+
+import os
+import csv
+import io
+
+SERVER_FILE = "/home/austinpham/.serverlist.csv"
+SONIC_MGMT_INVENTORY = "/home/austinpham/projects/sonic-mgmt/ansible/files"
+
+user_input = input("Are you sure? This will overwrite existing file ([y]/n): ").strip().lower()
+if user_input == 'n':
+    exit(1)
+
+devices_files = [file for file in os.listdir(SONIC_MGMT_INVENTORY) if file.endswith("_devices.csv")]
+
+IGNORE_HOST = ["pdu", "console", "management", "ixia"]
+
+def should_ignore(hostname):
+    for ignore in IGNORE_HOST:
+        if ignore in hostname.lower():
+            return True
+    return False
+
+def strip_prefix(ip):
+    slash = ip.find("/")
+    if slash > 0:
+        return ip[:ip.index("/")]
+    return ip
+
+buffer = io.StringIO()
+buffer.write("# Format: servername      IP\n")
+
+
+for file in devices_files:
+    with open(os.path.join(SONIC_MGMT_INVENTORY, file)) as f:
+        reader = csv.DictReader(f)
+        for device in reader:
+            if should_ignore(device['Hostname']): continue
+            buffer.write(f'{device["Hostname"].lower():<50}{strip_prefix(device["ManagementIp"])}\n')
+
+
+
+buffer.seek(0)
+with open(SERVER_FILE, "w") as f:
+    f.write(buffer.read())
